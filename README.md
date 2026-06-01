@@ -60,8 +60,7 @@ This project is released under the MIT License. See [LICENSE](LICENSE).
 
 - Windows 10/11
 - WSL2
-- Ubuntu，已测试环境：
-  - Ubuntu 26.04 LTS
+- Ubuntu
 
 ### 必需软件
 
