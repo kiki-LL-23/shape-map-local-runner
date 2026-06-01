@@ -218,13 +218,13 @@ wsl --exec bash -lc "whoami; uname -a"
 将整个项目文件夹复制到新电脑，例如：
 
 ```text
-C:\Users\<你的用户名>\Documents\SHAPE-MAP分析网页
+C:\Users\<你的用户名>\Documents\shape-map-local-runner
 ```
 
 建议保留以下目录结构：
 
 ```text
-SHAPE-MAP分析网页/
+shape-map-local-runner/
   README.md
   SHAPE-MaP-Local-Runner.html
   start_shape_map_web.bat
