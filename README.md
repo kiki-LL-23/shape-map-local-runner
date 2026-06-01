@@ -3,6 +3,8 @@
 **English summary:** A local web interface for demultiplexing SHAPE-MaP sequencing reads and running ShapeMapper2 under Windows + WSL. The tool keeps FASTQ/FASTA data on the local machine and provides a browser UI at `http://127.0.0.1:8765`.
 
 本项目是一个本地运行的 SHAPE-MaP 分析工具。它提供一个浏览器网页界面，用于上传或选择本地 FASTQ/FASTA 文件，按 barcode/引物拆分 mixed reads，并调用 WSL Ubuntu 中的 ShapeMapper2 完成 SHAPE-MaP 分析。
+<img width="1983" height="793" alt="image" src="https://github.com/user-attachments/assets/aa813697-6a27-4d49-9947-631381003739" />
+
 
 数据不会上传到互联网。网页运行在本机：
 
