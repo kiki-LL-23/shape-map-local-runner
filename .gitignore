@@ -1,0 +1,49 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local sequencing data and user uploads
+data/*
+!data/.gitkeep
+downloads/*
+!downloads/.gitkeep
+projects/*.json
+results/
+tools/
+shapemapper_temp/
+
+# Large biology data files
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.sam
+*.bam
+*.cram
+*.fa
+*.fasta
+*.ct
+*.shape
+*.map
+*.tab
+
+# Downloaded installers and archives
+*.tar.gz
+*.zip
+*.7z
+
+# Logs and reports generated locally
+*.log
+*_shapemapper_log.txt
+
+# Papers, notes, and local-only documents
+*.pdf
+*.docx
+*.xlsx
+
+# Secrets
+.env
+.env.*
+secrets.*
+*api_key*
+*token*

@@ -1,0 +1,57 @@
+{
+  "project_name": "tiled_amplicon_project",
+  "output_dir": "../results/tiled_amplicon_project",
+  "reference_assembly": {
+    "fragments_fasta": "../data/reference_fragments.fa",
+    "output_fasta": "../results/tiled_amplicon_project/assembled_target.fa",
+    "name": "full_target",
+    "min_overlap": 20,
+    "max_mismatches": 0,
+    "allow_no_overlap": false,
+    "order": ["fragment_001", "fragment_002", "fragment_003"]
+  },
+  "input": {
+    "r1": "../data/raw/mixed_R1.fastq.gz",
+    "r2": "../data/raw/mixed_R2.fastq.gz"
+  },
+  "demux": {
+    "search_bases": 40,
+    "max_mismatches": 1,
+    "anchored": false,
+    "match_mode": "any",
+    "check_reverse_complement": false,
+    "samples": [
+      {
+        "name": "plus_modified",
+        "role": "modified",
+        "r1_primers": ["ACGTACGTACGT"],
+        "r2_primers": []
+      },
+      {
+        "name": "minus_untreated",
+        "role": "untreated",
+        "r1_primers": ["TGCATGCATGCA"],
+        "r2_primers": []
+      },
+      {
+        "name": "denatured_control",
+        "role": "denatured",
+        "r1_primers": ["GATTACAGATTA"],
+        "r2_primers": []
+      }
+    ]
+  },
+  "shapemapper": {
+    "executable": "~/tools/shapemapper2-2.3/shapemapper",
+    "amplicon": true,
+    "primers_file": "../data/amplicon_primers.txt",
+    "nproc": 4,
+    "min_depth": 1000,
+    "min_mapq": 10,
+    "min_qual_to_trim": 20,
+    "window_to_trim": 5,
+    "min_qual_to_count": 30,
+    "max_bg": 0.05,
+    "max_paired_fragment_length": 800
+  }
+}

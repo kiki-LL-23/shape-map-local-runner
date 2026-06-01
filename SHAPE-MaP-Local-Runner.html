@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SHAPE-MaP Local Runner Launcher</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f6f8fb;
+      color: #172033;
+    }
+    main {
+      max-width: 820px;
+      margin: 56px auto;
+      padding: 0 20px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #d8dee9;
+      border-radius: 8px;
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+    p {
+      line-height: 1.65;
+      color: #4b5565;
+    }
+    a.button {
+      display: inline-block;
+      margin: 14px 10px 8px 0;
+      padding: 11px 16px;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a.button.disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      pointer-events: auto;
+    }
+    code {
+      background: #eef2f7;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 14px;
+      border-radius: 8px;
+      overflow: auto;
+    }
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 6px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel">
+      <h1>SHAPE-MaP Local Runner</h1>
+      <p>
+        这个页面是本地分析工具的入口。真正的分析网页运行在
+        <code>http://127.0.0.1:8765</code>，数据和结果都保存在当前 project 里。
+      </p>
+
+      <a class="button disabled" id="openApp" href="http://127.0.0.1:8765" target="_blank">打开分析网页</a>
+      <a class="button" href="start_shape_map_web.bat">启动本地服务</a>
+
+      <div class="status" id="status">正在检查本地服务状态...</div>
+
+      <p>如果点击“打开分析网页”没有反应，先双击当前文件夹里的：</p>
+      <pre>start_shape_map_web.bat</pre>
+
+      <p>或者在 PowerShell 里运行：</p>
+      <pre>powershell -ExecutionPolicy Bypass -File .\scripts\start_local_web.ps1</pre>
+
+      <p>
+        注意：浏览器不允许单个 HTML 文件直接启动 WSL 或 ShapeMapper2，所以需要先启动本地服务。
+      </p>
+    </div>
+  </main>
+  <script>
+    let serviceReady = false;
+
+    async function checkStatus() {
+      const box = document.getElementById("status");
+      const openApp = document.getElementById("openApp");
+      try {
+        const res = await fetch("http://127.0.0.1:8765/", { mode: "cors" });
+        if (res.ok) {
+          serviceReady = true;
+          openApp.classList.remove("disabled");
+          box.textContent = "本地服务正在运行，可以点击“打开分析网页”。";
+        } else {
+          serviceReady = false;
+          openApp.classList.add("disabled");
+          box.textContent = "本地服务有响应，但状态异常。请重启 start_shape_map_web.bat。";
+        }
+      } catch (err) {
+        serviceReady = false;
+        openApp.classList.add("disabled");
+        box.textContent = "本地服务还没有启动。请先双击 start_shape_map_web.bat。";
+      }
+    }
+    document.getElementById("openApp").addEventListener("click", function (event) {
+      if (!serviceReady) {
+        event.preventDefault();
+        alert("本地服务未运行。请先点击“启动本地服务”，或双击 start_shape_map_web.bat。");
+      }
+    });
+    checkStatus();
+    setInterval(checkStatus, 3000);
+  </script>
+</body>
+</html>

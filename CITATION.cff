@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+title: "SHAPE-MaP Local Runner"
+message: "If you use this software, please cite this repository and the ShapeMapper2/SHAPE-MaP publications."
+type: software
+authors:
+  - name: "SHAPE-MaP Local Runner contributors"
+version: "0.1.0"
+date-released: "2026-06-01"
+license: "MIT"
+repository-code: "https://github.com/REPLACE-WITH-OWNER/shape-map-local-runner"
+preferred-citation:
+  type: article
+  title: "Accurate SHAPE-directed RNA structure determination"
+  authors:
+    - family-names: "Busan"
+      given-names: "Steven"
+    - family-names: "Weeks"
+      given-names: "Kevin M."
+  journal: "RNA"
+  year: 2018
+  doi: "10.1261/rna.061945.117"
+references:
+  - type: article
+    title: "SHAPE-MaP: RNA structure analysis by selective 2'-hydroxyl acylation and mutational profiling"
+    authors:
+      - family-names: "Siegfried"
+        given-names: "Nathan A."
+      - family-names: "Busan"
+        given-names: "Steven"
+      - family-names: "Rice"
+        given-names: "Gregory M."
+      - family-names: "Nelson"
+        given-names: "Jacqueline A. E."
+      - family-names: "Weeks"
+        given-names: "Kevin M."
+    journal: "Nature Methods"
+    year: 2014
+    doi: "10.1038/nmeth.3029"
