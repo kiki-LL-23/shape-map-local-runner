@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""Core local SHAPE-MaP workflow.
-
-This script can assemble reference FASTA fragments, demultiplex mixed FASTQ
-files by short barcode/primer sequences, and launch ShapeMapper2 with the
-generated sample folders.
-"""
-
 import argparse
 import gzip
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
-VALID_ROLES = {"modified", "untreated", "denatured"}
+ROLE_ORDER = ["modified", "untreated", "denatured"]
+VALID_ROLES = set(ROLE_ORDER)
 
 
 def normalize_seq(seq):
@@ -181,10 +176,16 @@ def best_primer_hit(read_seq, primers, search_bases, max_mismatches, anchored):
 @dataclass
 class Sample:
     name: str
+    group: str
     role: str
     r1_primers: list
     r2_primers: list
     match_mode: str
+
+
+def safe_group_name(name):
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "default")).strip("_")
+    return name or "default"
 
 
 def load_samples(config):
@@ -192,6 +193,7 @@ def load_samples(config):
     check_rc = bool(demux.get("check_reverse_complement", False))
     samples = []
     for item in demux.get("samples", []):
+        group = safe_group_name(item.get("group") or demux.get("default_group") or "default")
         role = item.get("role", "").lower()
         if role not in VALID_ROLES:
             raise ValueError(f"Sample {item.get('name')} has invalid role: {role}")
@@ -205,6 +207,7 @@ def load_samples(config):
         samples.append(
             Sample(
                 name=item["name"],
+                group=group,
                 role=role,
                 r1_primers=r1,
                 r2_primers=r2,
@@ -214,6 +217,32 @@ def load_samples(config):
     if not samples:
         raise ValueError("Config has no demux.samples entries.")
     return samples
+
+
+def sample_groups(samples):
+    groups = []
+    seen = set()
+    for sample in samples:
+        if sample.group not in seen:
+            seen.add(sample.group)
+            groups.append(sample.group)
+    return groups
+
+
+def use_grouped_layout(groups):
+    return not (len(groups) == 1 and groups[0] == "default")
+
+
+def role_output_dir(demux_dir, group, role, grouped_layout):
+    if grouped_layout:
+        return demux_dir / group / role
+    return demux_dir / role
+
+
+def sample_count_key(sample, grouped_layout):
+    if grouped_layout:
+        return f"{sample.group}/{sample.name}"
+    return sample.name
 
 
 def classify_record(r1_seq, r2_seq, samples, search_bases, max_mismatches, anchored):
@@ -249,28 +278,41 @@ def demultiplex(config, config_dir):
 
     demux_cfg = config.get("demux", {})
     samples = load_samples(config)
+    groups = sample_groups(samples)
+    grouped_layout = use_grouped_layout(groups)
     search_bases = int(demux_cfg.get("search_bases", 40))
     max_mismatches = int(demux_cfg.get("max_mismatches", 1))
     anchored = bool(demux_cfg.get("anchored", False))
 
     role_handles = {}
-    for role in VALID_ROLES:
-        role_dir = demux_dir / role
-        role_dir.mkdir(exist_ok=True)
-        if r2_path:
-            role_handles[role] = (
-                gzip.open(role_dir / f"{role}_R1.fastq.gz", "wt"),
-                gzip.open(role_dir / f"{role}_R2.fastq.gz", "wt"),
-            )
-        else:
-            role_handles[role] = (gzip.open(role_dir / f"{role}.fastq.gz", "wt"), None)
+    for group in groups:
+        for role in ROLE_ORDER:
+            role_dir = role_output_dir(demux_dir, group, role, grouped_layout)
+            role_dir.mkdir(parents=True, exist_ok=True)
+            key = (group, role)
+            if r2_path:
+                role_handles[key] = (
+                    gzip.open(role_dir / f"{role}_R1.fastq.gz", "wt"),
+                    gzip.open(role_dir / f"{role}_R2.fastq.gz", "wt"),
+                )
+            else:
+                role_handles[key] = (gzip.open(role_dir / f"{role}.fastq.gz", "wt"), None)
 
     counts = {
         "total": 0,
         "unmatched": 0,
         "ambiguous": 0,
-        "samples": {sample.name: 0 for sample in samples},
-        "roles": {role: 0 for role in VALID_ROLES},
+        "layout": "grouped" if grouped_layout else "legacy",
+        "samples": {sample_count_key(sample, grouped_layout): 0 for sample in samples},
+        "roles": {role: 0 for role in ROLE_ORDER},
+        "groups": {
+            group: {
+                "matched": 0,
+                "samples": {sample.name: 0 for sample in samples if sample.group == group},
+                "roles": {role: 0 for role in ROLE_ORDER},
+            }
+            for group in groups
+        },
     }
 
     with open_fastq(r1_path, "r") as r1_handle:
@@ -294,9 +336,12 @@ def demultiplex(config, config_dir):
                 if status != "matched":
                     counts[status] += 1
                     continue
-                counts["samples"][sample.name] += 1
+                counts["samples"][sample_count_key(sample, grouped_layout)] += 1
                 counts["roles"][sample.role] += 1
-                out1, out2 = role_handles[sample.role]
+                counts["groups"][sample.group]["matched"] += 1
+                counts["groups"][sample.group]["samples"][sample.name] += 1
+                counts["groups"][sample.group]["roles"][sample.role] += 1
+                out1, out2 = role_handles[(sample.group, sample.role)]
                 write_record(out1, r1_record)
                 if r2_record:
                     write_record(out2, r2_record)
@@ -322,18 +367,24 @@ def resolve_path(value, config_dir):
     return (config_dir / path).resolve()
 
 
-def run_shapemapper(config, config_dir, demux_dir, target):
+def build_shapemapper_command(config, config_dir, target, group=None, grouped=False):
     sm_cfg = config.get("shapemapper", {})
     shapemapper = Path(sm_cfg.get("executable", "~/tools/shapemapper2-2.3/shapemapper")).expanduser()
     output_dir = resolve_path(config.get("output_dir", "results"), config_dir)
-    shape_out = output_dir / "shapemapper"
-    temp_dir = Path(sm_cfg.get("temp_dir", f"~/shape_map_runs/{config['project_name']}/temp")).expanduser()
+    if grouped:
+        shape_out = output_dir / "shapemapper" / group
+        temp_dir = Path(sm_cfg.get("temp_dir", f"~/shape_map_runs/{config['project_name']}/{group}/temp")).expanduser()
+        run_name = f"{config['project_name']}_{group}"
+    else:
+        shape_out = output_dir / "shapemapper"
+        temp_dir = Path(sm_cfg.get("temp_dir", f"~/shape_map_runs/{config['project_name']}/temp")).expanduser()
+        run_name = config["project_name"]
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
         str(shapemapper),
         "--name",
-        config["project_name"],
+        run_name,
         "--target",
         str(target),
         "--out",
@@ -373,26 +424,50 @@ def run_shapemapper(config, config_dir, demux_dir, target):
     if sm_cfg.get("extra_args"):
         cmd.extend([str(x) for x in sm_cfg["extra_args"]])
 
-    summary_path = demux_dir / "demux_summary.json"
-    demux_counts = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {"roles": {}}
+    return cmd, shape_out
+
+
+def run_shapemapper_for_group(config, config_dir, target, demux_dir, group, group_counts, grouped):
+    cmd, shape_out = build_shapemapper_command(config, config_dir, target, group=group, grouped=grouped)
+    role_base = demux_dir / group if grouped else demux_dir
     included_roles = []
     for role, flag in [("modified", "--modified"), ("untreated", "--untreated"), ("denatured", "--denatured")]:
-        role_dir = demux_dir / role
-        if int(demux_counts.get("roles", {}).get(role, 0)) > 0:
+        role_dir = role_base / role
+        if int(group_counts.get("roles", {}).get(role, 0)) > 0:
             cmd.extend([flag, "--folder", str(role_dir)])
             included_roles.append(role)
 
+    group_label = group if grouped else "default"
     if "modified" not in included_roles or "untreated" not in included_roles:
         raise ValueError(
             "Demultiplexing did not produce enough reads for ShapeMapper2. "
-            f"Included roles: {included_roles}. At minimum, modified and untreated need non-zero reads. "
+            f"Group: {group_label}. Included roles: {included_roles}. "
+            "At minimum, modified and untreated need non-zero reads. "
             "Check barcode sequences, read direction, anchored setting, and search_bases."
         )
 
-    print("Running ShapeMapper2:", flush=True)
+    print(f"Running ShapeMapper2 for group {group_label}:", flush=True)
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, cwd=str(Path.home()))
-    print(f"ShapeMapper2 complete: {shape_out}", flush=True)
+    print(f"ShapeMapper2 complete for group {group_label}: {shape_out}", flush=True)
+    return shape_out
+
+
+def run_shapemapper(config, config_dir, demux_dir, target):
+    summary_path = demux_dir / "demux_summary.json"
+    demux_counts = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {"roles": {}}
+    groups = demux_counts.get("groups") or {
+        "default": {
+            "matched": sum(int(demux_counts.get("roles", {}).get(role, 0)) for role in ROLE_ORDER),
+            "roles": demux_counts.get("roles", {}),
+            "samples": demux_counts.get("samples", {}),
+        }
+    }
+    grouped = demux_counts.get("layout") == "grouped"
+    outputs = []
+    for group, group_counts in groups.items():
+        outputs.append(run_shapemapper_for_group(config, config_dir, target, demux_dir, group, group_counts, grouped))
+    return outputs
 
 
 def write_run_summary(config, target, status, message, demux_counts=None, shapemapper_out=None):
@@ -437,7 +512,7 @@ def main():
         demux_dir, demux_counts = demultiplex(config, config_dir)
 
     if not args.demux_only:
-        run_shapemapper(config, config_dir, demux_dir, target)
+        shapemapper_outputs = run_shapemapper(config, config_dir, demux_dir, target)
         write_run_summary(
             config,
             target,

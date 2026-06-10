@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+import gzip
 from pathlib import Path
 
 
@@ -40,6 +41,58 @@ class FastaTests(unittest.TestCase):
             shape_map_local.write_fasta(path, "target", "ACGT" * 30, line_width=10)
             records = shape_map_local.read_fasta(path)
         self.assertEqual(records, [("target", "ACGT" * 30)])
+
+
+class DemultiplexTests(unittest.TestCase):
+    def write_fastq(self, path, records):
+        with Path(path).open("w", encoding="utf-8", newline="\n") as handle:
+            for index, seq in enumerate(records, start=1):
+                handle.write(f"@read{index}\n{seq}\n+\n{'I' * len(seq)}\n")
+
+    def count_gz_fastq(self, path):
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            return sum(1 for _line in handle) // 4
+
+    def test_demultiplex_supports_multiple_sample_groups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            r1 = tmp_path / "mixed_R1.fastq"
+            self.write_fastq(
+                r1,
+                [
+                    "TAGAAAAAA",
+                    "ATCAAAAAA",
+                    "GGGAAAAAA",
+                    "CCCAAAAAA",
+                    "TTTAAAAAA",
+                ],
+            )
+            config = {
+                "output_dir": str(tmp_path / "out"),
+                "input": {"r1": str(r1)},
+                "demux": {
+                    "search_bases": 3,
+                    "max_mismatches": 0,
+                    "anchored": True,
+                    "samples": [
+                        {"group": "RNA1", "name": "rna1_plus", "role": "modified", "r1_primers": ["TAG"]},
+                        {"group": "RNA1", "name": "rna1_minus", "role": "untreated", "r1_primers": ["ATC"]},
+                        {"group": "RNA2", "name": "rna2_plus", "role": "modified", "r1_primers": ["GGG"]},
+                        {"group": "RNA2", "name": "rna2_minus", "role": "untreated", "r1_primers": ["CCC"]},
+                    ],
+                },
+            }
+
+            demux_dir, counts = shape_map_local.demultiplex(config, tmp_path)
+
+            self.assertEqual(counts["layout"], "grouped")
+            self.assertEqual(counts["unmatched"], 1)
+            self.assertEqual(counts["groups"]["RNA1"]["roles"]["modified"], 1)
+            self.assertEqual(counts["groups"]["RNA1"]["roles"]["untreated"], 1)
+            self.assertEqual(counts["groups"]["RNA2"]["roles"]["modified"], 1)
+            self.assertEqual(counts["groups"]["RNA2"]["roles"]["untreated"], 1)
+            self.assertEqual(self.count_gz_fastq(demux_dir / "RNA1" / "modified" / "modified.fastq.gz"), 1)
+            self.assertEqual(self.count_gz_fastq(demux_dir / "RNA2" / "untreated" / "untreated.fastq.gz"), 1)
 
 
 if __name__ == "__main__":

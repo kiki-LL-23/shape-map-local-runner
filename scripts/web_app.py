@@ -62,12 +62,17 @@ INDEX_HTML = r"""<!doctype html>
     input[type=file] { padding:8px; }
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
     .sample { border:1px solid var(--line); border-radius:8px; padding:12px; margin:10px 0; background:#fbfcff; }
+    .group-card { border:1px solid var(--line); border-radius:8px; padding:14px; margin:12px 0; background:#fff; }
+    .group-head { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:end; }
+    .role-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; font-weight:700; }
     .hint { color:var(--muted); font-size:12px; margin-top:5px; line-height:1.45; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .check { display:flex; gap:8px; align-items:center; margin-top:12px; font-size:13px; }
     .check input { width:auto; }
     button { background:var(--brand); color:#fff; border:0; border-radius:6px; padding:10px 14px; font-size:14px; cursor:pointer; }
     button.secondary { background:#334155; }
+    button.small { padding:7px 10px; font-size:12px; }
+    button.danger { background:#b42318; }
     button:disabled { opacity:.6; cursor:not-allowed; }
     .mode { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px; }
     .mode label { margin:0; border:1px solid var(--line); padding:9px; border-radius:6px; font-weight:500; cursor:pointer; }
@@ -189,34 +194,12 @@ INDEX_HTML = r"""<!doctype html>
           <h3>按引物拆分样本</h3>
           <button class="help-btn" type="button" data-help="demux" title="查看拆分参数说明">?</button>
         </div>
-        <div class="sample">
-          <strong>Modified / 修饰后</strong>
-          <label>显示名称</label>
-          <input name="modified_name" value="modified" />
-          <div class="grid">
-            <div><label>R1 识别序列</label><textarea name="modified_r1"></textarea></div>
-            <div><label>R2 识别序列</label><textarea name="modified_r2"></textarea></div>
-          </div>
+        <input type="hidden" name="sample_groups_json" id="sampleGroupsJson" />
+        <div id="sampleGroups"></div>
+        <div class="row">
+          <button class="secondary" type="button" id="addGroupBtn">添加一套样本组</button>
         </div>
-        <div class="sample">
-          <strong>Untreated / 未处理</strong>
-          <label>显示名称</label>
-          <input name="untreated_name" value="untreated" />
-          <div class="grid">
-            <div><label>R1 识别序列</label><textarea name="untreated_r1"></textarea></div>
-            <div><label>R2 识别序列</label><textarea name="untreated_r2"></textarea></div>
-          </div>
-        </div>
-        <div class="sample">
-          <strong>Denatured / 变性，可选</strong>
-          <label>显示名称</label>
-          <input name="denatured_name" value="denatured" />
-          <div class="grid">
-            <div><label>R1 识别序列</label><textarea name="denatured_r1"></textarea></div>
-            <div><label>R2 识别序列</label><textarea name="denatured_r2"></textarea></div>
-          </div>
-          <div class="hint">如果没有 denatured 样本，这一组名称和识别序列都可以留空；程序会自动按两样本模式运行。</div>
-        </div>
+        <div class="hint">每一套样本组代表一个可以独立分析的对象，例如 RNA1、RNA2。每套组至少需要 Modified 和 Untreated；Denatured 可以留空。</div>
         <div class="grid">
           <div>
             <label>搜索 read 前多少 bp</label>
@@ -287,6 +270,100 @@ INDEX_HTML = r"""<!doctype html>
     const helpDialog = document.getElementById('helpDialog');
     const helpTitle = document.getElementById('helpTitle');
     const helpBody = document.getElementById('helpBody');
+    const sampleGroupsEl = document.getElementById('sampleGroups');
+    const sampleGroupsJson = document.getElementById('sampleGroupsJson');
+    let groupCounter = 0;
+    const roleLabels = {
+      modified: 'Modified / 修饰后',
+      untreated: 'Untreated / 未处理',
+      denatured: 'Denatured / 变性，可选'
+    };
+
+    function escapeAttr(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch]));
+    }
+
+    function roleBlock(role, defaults = {}) {
+      return `
+        <div class="sample" data-role="${role}">
+          <div class="role-title"><span>${roleLabels[role]}</span></div>
+          <label>样本显示名称</label>
+          <input class="sample-name" value="${escapeAttr(defaults.name || role)}" />
+          <div class="grid">
+            <div><label>R1 识别序列</label><textarea class="sample-r1">${escapeAttr(defaults.r1 || '')}</textarea></div>
+            <div><label>R2 识别序列</label><textarea class="sample-r2">${escapeAttr(defaults.r2 || '')}</textarea></div>
+          </div>
+          ${role === 'denatured' ? '<div class="hint">没有 denatured 时，这一行可以完全留空。</div>' : ''}
+        </div>
+      `;
+    }
+
+    function addSampleGroup(defaults = {}) {
+      groupCounter += 1;
+      const groupName = defaults.group_name || `group${groupCounter}`;
+      const samples = defaults.samples || {};
+      const card = document.createElement('div');
+      card.className = 'group-card';
+      card.innerHTML = `
+        <div class="group-head">
+          <div>
+            <label>样本套组名称</label>
+            <input class="group-name" value="${escapeAttr(groupName)}" placeholder="例如 RNA1 或 amplicon_01" />
+          </div>
+          <button class="danger small remove-group" type="button">删除这套</button>
+        </div>
+        ${roleBlock('modified', samples.modified || {name: 'modified'})}
+        ${roleBlock('untreated', samples.untreated || {name: 'untreated'})}
+        ${roleBlock('denatured', samples.denatured || {name: 'denatured'})}
+      `;
+      card.querySelector('.remove-group').addEventListener('click', () => {
+        if (document.querySelectorAll('.group-card').length <= 1) {
+          alert('至少保留一套样本组。');
+          return;
+        }
+        card.remove();
+      });
+      sampleGroupsEl.appendChild(card);
+    }
+
+    function collectSampleGroups() {
+      const groups = [];
+      document.querySelectorAll('.group-card').forEach((card, index) => {
+        const groupName = card.querySelector('.group-name').value.trim() || `group${index + 1}`;
+        const samples = [];
+        card.querySelectorAll('.sample[data-role]').forEach((sampleEl) => {
+          const role = sampleEl.dataset.role;
+          const name = sampleEl.querySelector('.sample-name').value.trim() || role;
+          const r1 = sampleEl.querySelector('.sample-r1').value.trim();
+          const r2 = sampleEl.querySelector('.sample-r2').value.trim();
+          if (r1 || r2) {
+            samples.push({ role, name, r1, r2 });
+          }
+        });
+        if (samples.length) {
+          groups.push({ group_name: groupName, samples });
+        }
+      });
+      sampleGroupsJson.value = JSON.stringify(groups);
+      return groups;
+    }
+
+    document.getElementById('addGroupBtn').addEventListener('click', () => addSampleGroup());
+    addSampleGroup({
+      group_name: 'group1',
+      samples: {
+        modified: {name: 'modified'},
+        untreated: {name: 'untreated'},
+        denatured: {name: 'denatured'}
+      }
+    });
+
     const helpText = {
       demux: {
         title: '按 barcode/引物拆分样本怎么调',
@@ -312,14 +389,16 @@ INDEX_HTML = r"""<!doctype html>
           </ul>
           <h3>样本显示名称</h3>
           <ul>
-            <li>底层角色仍然是 modified / untreated / denatured，但显示名称可以按实验命名，例如 sample-plus、sample-minus。</li>
-            <li>如果没有 denatured 样本，denatured 这一组可以留空，程序会按 modified + untreated 两样本模式运行。</li>
+            <li>每一套样本组都可以独立命名，例如 RNA1、RNA2、amplicon_01。</li>
+            <li>每套组内部仍然使用 modified / untreated / denatured 三个角色；样本显示名称可以按实验命名，例如 RNA1-plus、RNA1-minus。</li>
+            <li>如果某套组没有 denatured 样本，denatured 这一行可以留空，程序会按 modified + untreated 两样本模式运行。</li>
           </ul>
           <h3>填写格式示例</h3>
           <ul>
             <li>单个 barcode：<code>TAGCTTGT</code></li>
             <li>多个候选 barcode：每行一个，例如 <code>TAGCTTGT</code>、<code>TAGCTTGC</code></li>
             <li>R1 有 barcode、R2 没有：只填 R1 识别序列，R2 留空。</li>
+            <li>样本套组名称：<code>RNA1</code>、<code>RNA2</code>、<code>fragment_set_01</code></li>
             <li>样本显示名称：<code>sample-plus</code>、<code>sample-minus</code>、<code>sample-denatured</code></li>
           </ul>
         `
@@ -405,6 +484,14 @@ INDEX_HTML = r"""<!doctype html>
           }
           html += '</tbody></table>';
         }
+        if (r.demux.groups) {
+          html += '<table><thead><tr><th>样本套组</th><th>modified</th><th>untreated</th><th>denatured</th></tr></thead><tbody>';
+          for (const [groupName, groupData] of Object.entries(r.demux.groups)) {
+            const roles = groupData.roles || {};
+            html += `<tr><td>${groupName}</td><td>${roles.modified ?? 0}</td><td>${roles.untreated ?? 0}</td><td>${roles.denatured ?? 0}</td></tr>`;
+          }
+          html += '</tbody></table>';
+        }
       }
       if (r.output_dir) html += `<div style="margin-top:8px"><strong>输出目录：</strong><br>${r.output_dir}</div>`;
       if (r.suggestion) html += `<div style="margin-top:8px"><strong>建议：</strong> ${r.suggestion}</div>`;
@@ -452,6 +539,11 @@ INDEX_HTML = r"""<!doctype html>
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const groups = collectSampleGroups();
+      if (!groups.length && new FormData(form).get('run_mode') !== 'assemble') {
+        alert('请至少填写一套样本组的 Modified 和 Untreated 识别序列。');
+        return;
+      }
       document.getElementById('submitBtn').disabled = true;
       logBox.textContent = '正在提交任务...';
       const res = await fetch('/api/run', { method: 'POST', body: new FormData(form) });
@@ -530,6 +622,46 @@ def save_upload(files, key, upload_dir):
     return str(path)
 
 
+def demux_samples_from_fields(fields):
+    samples = []
+    raw_groups = (fields.get("sample_groups_json") or "").strip()
+    if raw_groups:
+        for group in json.loads(raw_groups):
+            group_name = group.get("group_name") or group.get("name") or "default"
+            for item in group.get("samples", []):
+                role = (item.get("role") or "").lower()
+                r1_primers = split_seqs(item.get("r1", ""))
+                r2_primers = split_seqs(item.get("r2", ""))
+                if not role or (not r1_primers and not r2_primers):
+                    continue
+                samples.append(
+                    {
+                        "group": group_name,
+                        "name": (item.get("name") or role).strip() or role,
+                        "role": role,
+                        "r1_primers": r1_primers,
+                        "r2_primers": r2_primers,
+                    }
+                )
+        return samples
+
+    for role in ["modified", "untreated", "denatured"]:
+        r1_primers = split_seqs(fields.get(f"{role}_r1", ""))
+        r2_primers = split_seqs(fields.get(f"{role}_r2", ""))
+        if not r1_primers and not r2_primers:
+            continue
+        sample_name = (fields.get(f"{role}_name") or role).strip() or role
+        samples.append(
+            {
+                "name": sample_name,
+                "role": role,
+                "r1_primers": r1_primers,
+                "r2_primers": r2_primers,
+            }
+        )
+    return samples
+
+
 def build_config(fields, files, job_id):
     project_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", fields.get("project_name", "shape_map_project")).strip("_")
     if not project_name:
@@ -572,20 +704,7 @@ def build_config(fields, files, job_id):
     if primers_file:
         config["shapemapper"]["primers_file"] = primers_file
 
-    for role in ["modified", "untreated", "denatured"]:
-        r1_primers = split_seqs(fields.get(f"{role}_r1", ""))
-        r2_primers = split_seqs(fields.get(f"{role}_r2", ""))
-        if not r1_primers and not r2_primers:
-            continue
-        sample_name = (fields.get(f"{role}_name") or role).strip() or role
-        config["demux"]["samples"].append(
-            {
-                "name": sample_name,
-                "role": role,
-                "r1_primers": r1_primers,
-                "r2_primers": r2_primers,
-            }
-        )
+    config["demux"]["samples"] = demux_samples_from_fields(fields)
 
     ref_mode = fields.get("ref_mode", "target")
     if ref_mode == "assemble":

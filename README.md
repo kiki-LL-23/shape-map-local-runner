@@ -45,10 +45,11 @@ This project is released under the MIT License. See [LICENSE](LICENSE).
 
 - 本地 HTML 入口页
 - 本地网页分析界面
-- mixed FASTQ 按 barcode 拆分为：
+- mixed FASTQ 按 barcode 拆分为一套或多套样本组，每套组内部包含：
   - modified
   - untreated
   - denatured
+- 支持在同一个 mixed FASTQ 中同时分析多套 modified/untreated 组合，例如 RNA1、RNA2、RNA3
 - 支持 single-end 和 paired-end FASTQ
 - 支持完整参考 FASTA
 - 支持多个参考片段 FASTA 拼接成完整 target
@@ -459,6 +460,25 @@ results/<project_name>/run_summary.json
 results/web_logs/
 ```
 
+如果只设置一套默认样本组，拆分结果保持旧格式：
+
+```text
+results/<project_name>/demux/modified/
+results/<project_name>/demux/untreated/
+results/<project_name>/demux/denatured/
+```
+
+如果在网页端添加了多套样本组，拆分结果会按样本套组再分一层：
+
+```text
+results/<project_name>/demux/RNA1/modified/
+results/<project_name>/demux/RNA1/untreated/
+results/<project_name>/demux/RNA2/modified/
+results/<project_name>/demux/RNA2/untreated/
+results/<project_name>/shapemapper/RNA1/
+results/<project_name>/shapemapper/RNA2/
+```
+
 `demux_summary.json` 会记录：
 
 - total reads
@@ -467,6 +487,7 @@ results/web_logs/
 - modified reads
 - untreated reads
 - denatured reads
+- 每套样本组的 modified / untreated / denatured reads
 
 网页端也会显示这些统计。
 

@@ -14,21 +14,38 @@
     "check_reverse_complement": false,
     "samples": [
       {
+        "group": "RNA1",
         "name": "plus_modified",
         "role": "modified",
         "r1_primers": ["ACGTACGTACGT"],
         "r2_primers": []
       },
       {
+        "group": "RNA1",
         "name": "minus_untreated",
         "role": "untreated",
         "r1_primers": ["TGCATGCATGCA"],
         "r2_primers": []
       },
       {
+        "group": "RNA1",
         "name": "denatured_control",
         "role": "denatured",
         "r1_primers": ["GATTACAGATTA"],
+        "r2_primers": []
+      },
+      {
+        "group": "RNA2",
+        "name": "rna2_modified",
+        "role": "modified",
+        "r1_primers": ["TAGCTTGT"],
+        "r2_primers": []
+      },
+      {
+        "group": "RNA2",
+        "name": "rna2_untreated",
+        "role": "untreated",
+        "r1_primers": ["ATCACGTT"],
         "r2_primers": []
       }
     ]

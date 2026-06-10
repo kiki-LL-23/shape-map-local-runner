@@ -22,21 +22,38 @@
     "check_reverse_complement": false,
     "samples": [
       {
+        "group": "amplicon_set_01",
         "name": "plus_modified",
         "role": "modified",
         "r1_primers": ["ACGTACGTACGT"],
         "r2_primers": []
       },
       {
+        "group": "amplicon_set_01",
         "name": "minus_untreated",
         "role": "untreated",
         "r1_primers": ["TGCATGCATGCA"],
         "r2_primers": []
       },
       {
+        "group": "amplicon_set_01",
         "name": "denatured_control",
         "role": "denatured",
         "r1_primers": ["GATTACAGATTA"],
+        "r2_primers": []
+      },
+      {
+        "group": "amplicon_set_02",
+        "name": "set02_modified",
+        "role": "modified",
+        "r1_primers": ["TAGCTTGT"],
+        "r2_primers": []
+      },
+      {
+        "group": "amplicon_set_02",
+        "name": "set02_untreated",
+        "role": "untreated",
+        "r1_primers": ["ATCACGTT"],
         "r2_primers": []
       }
     ]
